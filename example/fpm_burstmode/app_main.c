@@ -8,6 +8,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include "ofp.h"
 
@@ -21,12 +22,14 @@ typedef struct {
 	int if_count;		/**< Number of interfaces to be used */
 	char **if_names;	/**< Array of pointers to interface names */
 	char *conf_file;
+	int perf_stat;
 } appl_args_t;
 
 /* helper funcs */
 static void parse_args(int argc, char *argv[], appl_args_t *appl_args);
 static void print_info(char *progname, appl_args_t *appl_args);
 static void usage(char *progname);
+static int start_performance(int core_id);
 
 ofp_init_global_t app_init_params; /**< global OFP init parms */
 
@@ -79,7 +82,7 @@ static void *pkt_io_recv(void *arg)
 
 	pktio = ofp_port_pktio_get(thr_args->port);
 
-	OFP_DBG("PKT-IO receive starting on port: %d, pktio-id: %"PRIX64"\n",
+	printf("PKT-IO receive starting on port: %d, pktio-id: %"PRIX64"\n",
 		  thr_args->port, odp_pktio_to_u64(pktio));
 
 	while (1) {
@@ -226,9 +229,9 @@ int main(int argc, char *argv[])
 		odp_cpumask_set(&cpu_mask, cpu);
 		odp_cpumask_to_str(&cpu_mask, cpumaskstr, sizeof(cpumaskstr));
 
-		OFP_DBG("Starting pktio receive on core: %d port: %d\n",
+		printf("Starting pktio receive on core: %d port: %d\n",
 			  cpu, pktio_thr_args[i].port);
-		OFP_DBG("cpu mask: %s\n", cpumaskstr);
+		printf("cpu mask: %s\n", cpumaskstr);
 
 		ofp_linux_pthread_create(&thread_tbl[i],
 					  &cpu_mask,
@@ -246,6 +249,25 @@ int main(int argc, char *argv[])
 				  NULL,
 				  ODP_THREAD_CONTROL
 				);
+
+	/*
+	 * If we choose to check performance, a performance monitoring client
+	 * will be started on the management core. Once every second it will
+	 * read the statistics from the workers from a shared memory region.
+	 * Using this has negligible performance impact (<<0.01%).
+	 */
+	if (params.perf_stat) {
+		if (start_performance(app_init_params.linux_core_id) <= 0) {
+			OFP_ERR("Error: Failed to init performance monitor");
+			ofp_stop_processing();
+			odph_linux_pthread_join(thread_tbl, num_workers);
+			ofp_term_local();
+			ofp_term_global();
+			odp_term_local();
+			odp_term_global();
+			return EXIT_FAILURE;
+		}
+	}
 
 	/* other app code here.*/
 	/* Start CLI */
@@ -283,7 +305,7 @@ static void parse_args(int argc, char *argv[], appl_args_t *appl_args)
 	memset(appl_args, 0, sizeof(*appl_args));
 
 	while (1) {
-		opt = getopt_long(argc, argv, "+c:i:hf:",
+		opt = getopt_long(argc, argv, "+c:i:hpf:",
 				  longopts, &long_index);
 
 		if (opt == -1)
@@ -339,6 +361,10 @@ static void parse_args(int argc, char *argv[], appl_args_t *appl_args)
 		case 'h':
 			usage(argv[0]);
 			exit(EXIT_SUCCESS);
+			break;
+
+		case 'p':
+			appl_args->perf_stat = 1;
 			break;
 
 		case 'f':
@@ -421,4 +447,47 @@ static void usage(char *progname)
 		   "  -h, --help           Display help and exit.\n"
 		   "\n", NO_PATH(progname), NO_PATH(progname)
 		);
+}
+
+static void *perf_client(void *arg)
+{
+	(void) arg;
+
+#if ODP_VERSION < 106
+	if (odp_init_local(ODP_THREAD_CONTROL) != 0) {
+		OFP_ERR("Error: ODP local init failed.\n");
+		return NULL;
+	}
+#endif
+	if (ofp_init_local()) {
+		OFP_ERR("Error: OFP local init failed.\n");
+		return NULL;
+	}
+
+	ofp_set_stat_flags(OFP_STAT_COMPUTE_PERF);
+
+	while (1) {
+		struct ofp_perf_stat *ps = ofp_get_perf_statistics();
+		printf ("Mpps:%4.3f\n", ((float)ps->rx_fp_pps)/1000000);
+		usleep(1000000UL);
+	}
+
+	return NULL;
+}
+
+static int start_performance(int core_id)
+{
+	odph_linux_pthread_t cli_linux_pthread;
+	odp_cpumask_t cpumask;
+
+	odp_cpumask_zero(&cpumask);
+	odp_cpumask_set(&cpumask, core_id);
+
+	return ofp_linux_pthread_create(&cli_linux_pthread,
+					 &cpumask,
+					 perf_client,
+					 NULL,
+					 ODP_THREAD_WORKER
+					);
+
 }
