@@ -53,7 +53,7 @@ static enum ofp_return_code fastpath_local_hook(odp_packet_t pkt, void *arg)
 	return OFP_PKT_CONTINUE;
 }
 
-#define OFP_PKT_BURST_SIZE 16
+#define OFP_PKT_BURST_SIZE OFP_PKT_RX_BURST_SIZE
 
 struct pktio_thr_arg {
 	int port;
@@ -63,8 +63,7 @@ struct pktio_thr_arg {
 static void *pkt_io_recv(void *arg)
 {
 	odp_pktio_t pktio;
-	odp_packet_t pkt, pkt_tbl[OFP_PKT_BURST_SIZE];
-	int pkt_idx, pkt_cnt;
+	odp_packet_t pkt_tbl[OFP_PKT_BURST_SIZE];
 	struct pktio_thr_arg *thr_args;
 	ofp_pkt_processing_func pkt_func;
 
@@ -86,10 +85,15 @@ static void *pkt_io_recv(void *arg)
 		  thr_args->port, odp_pktio_to_u64(pktio));
 
 	while (1) {
-		pkt_cnt = odp_pktio_recv(pktio, pkt_tbl, OFP_PKT_BURST_SIZE);
+		int pkt_cnt = odp_pktio_recv(pktio, pkt_tbl, OFP_PKT_BURST_SIZE);
 
+#if 1
+        if (odp_likely(0 < pkt_cnt))
+            ofp_packet_pre_rt_burst(pkt_tbl, pkt_cnt, pkt_func);
+#else
+        int pkt_idx;
 		for (pkt_idx = 0; pkt_idx < pkt_cnt; pkt_idx++) {
-			pkt = pkt_tbl[pkt_idx];
+            odp_packet_t pkt = pkt_tbl[pkt_idx];
 
 			if (odp_unlikely(odp_packet_has_error(pkt))) {
 				OFP_DBG("Packet with error dropped.\n");
@@ -102,6 +106,7 @@ static void *pkt_io_recv(void *arg)
 #ifdef OFP_SEND_PKT_BURST
 		ofp_send_pending_pkt_burst();
 #endif /*OFP_SEND_PKT_BURST*/
+#endif
 	}
 
 	/* Never reached */
