@@ -20,6 +20,9 @@
 /**Enable PERFORMANCE measurements mode. Some validations are skipped.*/
 /* #define OFP_PERFORMANCE */
 
+/**Enable packet flow cache*/
+#define OFP_PKT_FLOW_CACHE
+
 /**Enable burst send of packets.*/
 #ifdef OFP_PERFORMANCE
 /* #define OFP_SEND_PKT_BURST */
@@ -77,6 +80,8 @@
 /**Maximum number of packets received when scheduling with schedule_multi.
  * Value in default_event_dispatcher().*/
 #define OFP_PKT_SCHED_MULTI_EVENT_SIZE 16
+/**Number of packets received at once by odp_pktio_recv() */
+#define OFP_PKT_RX_BURST_SIZE 16
 /**Number of packets sent at once in send_pkt_burst_out() */
 #define OFP_PKT_TX_BURST_SIZE 16
 

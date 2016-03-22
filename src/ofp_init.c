@@ -29,6 +29,7 @@
 #include "ofpi_avl.h"
 #include "ofpi_cli.h"
 #include "ofpi_pkt_processing.h"
+#include "ofpi_pkt_flowcache.h"
 #include "ofpi_ifnet.h"
 
 #include "ofpi_tcp_var.h"
@@ -138,6 +139,10 @@ int ofp_init_pre_global(const char *pool_name_unused,
 	HANDLE_ERROR(ofp_arp_init_global(arp_age_interval, arp_entry_timeout));
 
 	HANDLE_ERROR(ofp_route_init_global());
+
+#ifdef OFP_PKT_FLOW_CACHE
+	HANDLE_ERROR(ofp_flow_init_global());
+#endif
 
 	HANDLE_ERROR(ofp_portconf_init_global());
 
@@ -355,6 +360,11 @@ int ofp_term_post_global(const char *pool_name)
 
 	/* Cleanup interface related objects */
 	CHECK_ERROR(ofp_portconf_term_global(), rc);
+
+#ifdef OFP_PKT_FLOW_CACHE
+	/* Cleanup flows */
+	CHECK_ERROR(ofp_flow_term_global(), rc);
+#endif
 
 	/* Cleanup routes */
 	CHECK_ERROR(ofp_route_term_global(), rc);

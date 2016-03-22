@@ -21,6 +21,12 @@ struct ip_out {
 	struct ofp_nh_entry nh_vxlan;
 	int out_port;
 	uint32_t gw;
+#ifdef OFP_PKT_FLOW_CACHE
+    /* TODO: This is just l3 forward demo. Final solution should provide
+     *       own flow cache context (pkt->user_ctx or pkt->buf_hdr.udata)
+     */ 
+	uint16_t vlan_in;
+#endif
 	uint16_t vlan;
 	uint16_t vrf;
 	uint8_t is_local_address;

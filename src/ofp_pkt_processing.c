@@ -34,6 +34,7 @@
 
 #include "ofpi.h"
 #include "ofpi_pkt_processing.h"
+#include "ofpi_pkt_flowcache.h"
 #include "ofpi_portconf.h"
 #include "ofpi_rt_lookup.h"
 #include "ofpi_route.h"
@@ -1088,6 +1089,21 @@ static enum ofp_return_code ofp_ip_output_find_route(odp_packet_t pkt,
 	return OFP_PKT_CONTINUE;
 }
 
+#ifdef OFP_PKT_FLOW_CACHE
+static inline uint16_t get_vlan(odp_packet_t pkt)
+{
+    /* TODO: This is just demo. Final code should be optimized if possible
+     *       (branch misses, cache misses, alignments, vector processing).
+     *       However, this is slow path only (flow cache miss)
+     */
+	struct ofp_ether_vlan_header *veth = (struct ofp_ether_vlan_header *)odp_packet_l2_ptr(pkt, NULL);
+    if (veth->evl_encap_proto == odp_cpu_to_be_16(OFP_ETHERTYPE_VLAN))
+		return OFP_EVL_VLANOFTAG(odp_be_to_cpu_16(veth->evl_tag));
+    else
+        return 0;
+}
+#endif
+
 enum ofp_return_code ofp_ip_output(odp_packet_t pkt,
 	struct ofp_nh_entry *nh_param)
 {
@@ -1105,6 +1121,13 @@ enum ofp_return_code ofp_ip_output(odp_packet_t pkt,
 	odata.vrf = send_ctx ? send_ctx->vrf : 0;
 	odata.is_local_address = 0;
 	odata.nh = nh_param;
+#ifdef OFP_PKT_FLOW_CACHE
+    /* TODO: This is just l3 forward demo. Final solution should provide
+     *       own flow cache context (pkt->user_ctx or pkt->buf_hdr.udata)
+     */ 
+    odata.vlan_in = get_vlan(pkt);
+    odata.vlan = 0;
+#endif
 
 	if ((ret = ofp_ip_output_find_route(pkt, &odata)) != OFP_PKT_CONTINUE)
 		return ret;
@@ -1126,6 +1149,10 @@ enum ofp_return_code ofp_ip_output(odp_packet_t pkt,
 
 	if ((ret = ofp_ip_output_add_eth(pkt, &odata)) != OFP_PKT_CONTINUE)
 			return ret;
+
+#ifdef OFP_PKT_FLOW_CACHE
+    ofp_flow_post_rt_save(pkt, &odata);
+#endif
 
 	return ofp_ip_output_send(pkt, &odata);
 }
@@ -1423,7 +1450,9 @@ enum ofp_return_code ofp_packet_input(odp_packet_t pkt,
 
 	OFP_DEBUG_PACKET(OFP_DEBUG_PKT_RECV_NIC, pkt, ifnet->port);
 
+#ifndef OFP_PKT_FLOW_CACHE
 	OFP_UPDATE_PACKET_STAT(rx_fp, 1);
+#endif
 
 	OFP_UPDATE_PACKET_LATENCY_STAT(1);
 

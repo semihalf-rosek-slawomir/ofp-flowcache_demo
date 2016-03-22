@@ -40,6 +40,7 @@ include_HEADERS = \
 noinst_HEADERS = \
 		  $(top_srcdir)/include/ofpi_netlink.h \
 		  $(top_srcdir)/include/ofpi_pkt_processing.h \
+		  $(top_srcdir)/include/ofpi_pkt_flowcache.h \
 		  $(top_srcdir)/include/ofpi_arp.h \
 		  $(top_srcdir)/include/ofpi_avl.h \
 		  $(top_srcdir)/include/ofpi_callout.h \

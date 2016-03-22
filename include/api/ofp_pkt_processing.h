@@ -21,6 +21,20 @@ void *default_event_dispatcher(void *arg);
 enum ofp_return_code ofp_packet_input(odp_packet_t pkt,
 	odp_queue_t in_queue, ofp_pkt_processing_func pkt_func);
 
+/* Packet Burst API for defered processing
+ */
+void ofp_packet_pre_rt_enq(odp_packet_t pkt);
+void ofp_packet_input_enq(odp_packet_t pkt);
+void ofp_packet_output_enq(odp_packet_t pkt);
+void ofp_packet_post_rt_enq(odp_packet_t pkt, struct ofp_ifnet *dev);
+
+/* Packet Burst API for immediate processing
+ */
+void ofp_packet_pre_rt_burst(odp_packet_t pkt_table[], size_t len,
+    ofp_pkt_processing_func pkt_func);
+void ofp_packet_output_burst(odp_packet_t pkt_table[], size_t len,
+    ofp_pkt_processing_func pkt_func);
+
 enum ofp_return_code ofp_eth_vlan_processing(odp_packet_t pkt);
 enum ofp_return_code ofp_ipv4_processing(odp_packet_t pkt);
 enum ofp_return_code ofp_ipv6_processing(odp_packet_t pkt);
